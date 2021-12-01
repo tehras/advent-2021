@@ -7,6 +7,13 @@ fun main() {
 
   calculateIncreased(listOfNumbers)
   calculateSlidingScale(listOfNumbers)
+  calculateSlidingScaleCheating(listOfNumbers)
+}
+
+private fun calculateSlidingScaleCheating(listOfNumbers: List<Int>) {
+  val result = listOfNumbers.windowed(3).map { it.sum() }.windowed(2).count { it[1] > it[0] }
+
+  println("increased steps (cheating)- $result")
 }
 
 private fun calculateSlidingScale(listOfNumbers: List<Int>) {
