@@ -6,120 +6,98 @@ import day8.Number.*
 fun main() {
   val inputs = parseFile()
 
-  val count = inputs.obtainValuesMatchingLengths(One, Four, Seven, Eight)
-  println("There are $count amount of times 1, 4, 7, 8 are seen.")
-
-  decode(inputs)
+  decodeInput(inputs)
 }
 
-// This method calculates how many inputs match numbers lengths.
-private fun List<Input>.obtainValuesMatchingLengths(vararg numbers: Number): Int {
-  val lengthsToLookFor = numbers.map { it.chars.size }
+private fun decodeInput(inputs: List<Input>) {
+  val numbers = Number.values()
 
-  return map { it.values.toList() }
-    .flatten()
-    .filter { it.length in lengthsToLookFor }
-    .count()
-}
+  // We want to come up with an algorithm that will encode a [Number] based on other
+  // entries in the array. This relies on having access to all the entries.
+  val decoderMap = mutableMapOf<Long, Number>()
+  val numberEntries = numbers.map { it.chars }
 
-private fun decode(inputs: List<Input>) {
-  val total = inputs.sumOf(::decode)
+  // This will loop through Number.values() and creating encoding for it.
+  // We later will do the same for each [Input] - and match the encoding, and pull out of the encoding map.
+  encodeEntries(numberEntries) { array, encoding ->
+    decoderMap[encoding] = numbers.find { it.chars.matchesCharArray(array) }
+      ?: error("Could not find entry for array $array")
+  }
+
+  // Now that we got a decoder map, we have to encode every single Input, and then we can compare.
+  val total = inputs.sumOf {
+    sumInput(it, decoderMap)
+  }
 
   println("Total :: $total")
 }
 
-private fun decode(input: Input): Int {
-  val entries = input.entries
+fun sumInput(input: Input, decoderMap: MutableMap<Long, Number>): Int {
+  val entries = input.entries.map { it.toCharArray() }
+  val arrayToNumberMap = mutableMapOf<CharArray, Number>()
+
+  encodeEntries(entries) { array, encoding ->
+    arrayToNumberMap[array] = decoderMap[encoding] ?: error("Could not match encoding $encoding")
+  }
+
+  val values = input.values.map { it.toCharArray().sortedArray() }
+
+  return values
     .map {
-      it.toCharArray().sortedArray()
+      arrayToNumberMap.findCharArray(it)?.value
+        ?: error("Something went wrong, could not decode for $it")
     }
-
-  val newOne = entries.findByNumber(One).sortedArray()
-  val newFour = entries.findByNumber(Four).sortedArray()
-  val newSeven = entries.findByNumber(Seven).sortedArray()
-  val newEight = entries.findByNumber(Eight).sortedArray()
-
-  val mapping = mutableMapOf<CharArray, Number>()
-  mapping[newOne] = One
-  mapping[newFour] = Four
-  mapping[newSeven] = Seven
-  mapping[newEight] = Eight
-
-  val newNine = entries
-    .filter { it.size == 6 }
-    .first { entry ->
-      entry
-        .filterNot { it in newFour }
-        .count() == 2
-    }
-
-  mapping[newNine] = Nine
-
-  val newSix = entries
-    .filter { it.size == 6 }
-    .first { entry ->
-      newEight
-        .filterNot { it in entry }
-        .count() == 1 &&
-        entry.filter { it in newSeven }
-          .count() == 2
-    }
-
-  mapping[newSix] = Six
-
-  val newFive = entries
-    .filter { it.size == 5 }
-    .first { entry ->
-      newSix
-        .filterNot { it in entry }
-        .count() == 1
-    }
-
-  mapping[newFive] = Five
-
-  val newZero = entries
-    .filterNot { mapping.containsCharArray(it) }
-    .filter { it.size == 6 }
-    .first { entry ->
-      newEight.filterNot { it in entry }
-        .count() == 1
-    }
-
-  mapping[newZero] = Zero
-
-  val newThree = entries
-    .filterNot { mapping.containsCharArray(it) }
-    .filter { it.size == 5 }
-    .first { entry ->
-      entry.filterNot { it in newSeven }
-        .count() == 2
-    }
-  mapping[newThree] = Three
-
-  val newTwo = entries
-    .filterNot { mapping.containsCharArray(it) }
-    .first()
-
-  mapping[newTwo] = Two
-
-  // Ok now let's decode the values, based on the mappings.
-  // First remap.
-  return input.values
-    .map { it.toCharArray().sortedArray() }
-    .map { array ->
-      val value = mapping.findCharArray(array)?.value?.digitToChar()
-
-      value
-        ?: error("Could not find value for [${array.concatToString()}] for ${mapping.keys.map { it.concatToString() }}")
-    }
+    .map { it.digitToChar() }
     .toCharArray()
     .concatToString()
     .toInt()
-    .also { println("Returning :: $it") }
 }
 
-private fun Map<CharArray, Number>.containsCharArray(charArray: CharArray): Boolean {
-  return findCharArray(charArray) != null
+private fun encodeEntries(entries: List<CharArray>, block: (CharArray, Long) -> Unit) {
+  val sorted = entries.map { it.sortedArray() }
+    .sortedBy { it.size }
+
+  for (i in sorted.first().size..sorted.last().size) {
+    val matchingByLength = sorted.filter { it.size == i }
+
+    when {
+      matchingByLength.isEmpty() -> Unit // Do nothing.
+      matchingByLength.size == 1 -> {
+        // Only 1 match, so to simplify we're going to encode single.
+        val encoded = encodeSingle(matchingByLength[0])
+        block(matchingByLength[0], encoded)
+      }
+      else -> {
+        // When multiple.
+        matchingByLength.forEach { array ->
+          val encoded = encodeMultiple(array, sorted)
+          block(array, encoded)
+        }
+      }
+    }
+  }
+}
+
+fun encodeMultiple(chars: CharArray, all: List<CharArray>): Long {
+  var total = 0L
+  // The hash will be chars length + similarities with others.
+  all.forEach { array ->
+    // Multiply by index in order to differentiate if only 2 numbers.
+    total += chars
+      .sumOf {
+        if (array.contains(it)) {
+          1L
+        } else {
+          0L
+        }
+      }
+  }
+
+  return total
+}
+
+fun encodeSingle(chars: CharArray): Long {
+  return chars.size.toLong()
 }
 
 private fun Map<CharArray, Number>.findCharArray(charArray: CharArray): Number? {
@@ -132,8 +110,8 @@ private fun Map<CharArray, Number>.findCharArray(charArray: CharArray): Number? 
   }
 }
 
-private fun List<CharArray>.findByNumber(number: Number): CharArray {
-  return first { it.size == number.chars.size }
+private fun CharArray.matchesCharArray(charArray: CharArray): Boolean {
+  return charArray.sortedArray().concatToString() == sortedArray().concatToString()
 }
 
 private fun parseFile(): List<Input> {
